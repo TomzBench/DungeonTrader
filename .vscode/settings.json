@@ -1,0 +1,12 @@
+{
+  "rust-analyzer": {
+    "cargo": {
+      "features": "all",
+      "buildScripts": { "enable": true }
+    },
+    "check": {
+      "features": "all"
+    },
+    "procMacro": { "enable": true }
+  }
+}

@@ -1,0 +1,14 @@
+[package]
+name = "dungeon-tax"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dungeon-ini = { workspace = true, features = ["serde"] }
+csv = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+indoc = { workspace = true }
+serde_test = { workspace = true }

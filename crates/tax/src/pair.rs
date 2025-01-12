@@ -1,3 +1,7 @@
+/// Pair
+///
+use std::borrow::Cow;
+
 /// Helper for managing trade pairs (IE: BTC/USD, BTC/ETH)
 use serde::{
     de::{self, Unexpected, Visitor},
@@ -6,8 +10,13 @@ use serde::{
 };
 
 #[derive(Debug, PartialEq)]
-pub struct Pair(String, String);
-impl Serialize for Pair {
+pub struct Pair<'a>(pub Cow<'a, str>, pub Cow<'a, str>);
+impl<'a> Pair<'a> {
+    pub fn new<I: Into<Cow<'a, str>>>(pair0: I, pair1: I) -> Self {
+        Self(pair0.into(), pair1.into())
+    }
+}
+impl<'a> Serialize for Pair<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -18,7 +27,7 @@ impl Serialize for Pair {
 
 pub struct PairVisitor;
 impl<'de> Visitor<'de> for PairVisitor {
-    type Value = Pair;
+    type Value = Pair<'de>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(formatter, "a currency pair string, ie: (BTC/ETH)")
@@ -26,17 +35,28 @@ impl<'de> Visitor<'de> for PairVisitor {
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
+        E: de::Error,
+    {
+        if let Some((pair0, pair1)) = v.split_once('/') {
+            Ok(Pair(Cow::Owned(pair0.into()), Cow::Owned(pair1.into())))
+        } else {
+            Err(de::Error::invalid_value(Unexpected::Str(v), &self))
+        }
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
         E: serde::de::Error,
     {
         if let Some((pair0, pair1)) = v.split_once('/') {
-            Ok(Pair(pair0.to_owned(), pair1.to_owned()))
+            Ok(Pair(Cow::Borrowed(pair0), Cow::Borrowed(pair1)))
         } else {
             Err(de::Error::invalid_value(Unexpected::Str(v), &self))
         }
     }
 }
 
-impl<'de> Deserialize<'de> for Pair {
+impl<'de: 'a, 'a> Deserialize<'de> for Pair<'a> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -52,7 +72,7 @@ mod test {
 
     #[test]
     fn should_serialize() {
-        let pair = Pair("BTC".to_string(), "USD".to_string());
+        let pair = Pair::new("BTC", "USD");
         assert_tokens(&pair, &[Token::String("BTC/USD")]);
     }
 }

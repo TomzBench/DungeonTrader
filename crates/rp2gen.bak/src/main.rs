@@ -13,17 +13,15 @@ fn main() -> Result<()> {
         .arg(arg!(-o --output <FILE> "CSV output (stdout if empty)"))
         .get_matches();
 
-    // Parse input
-    let csv = csv::Reader::from_reader(std::io::stdin())
-        .deserialize::<kraken::account::TradesExport>()
-        .collect::<csv::Result<Vec<kraken::account::TradesExport>>>()?;
+    let mut rdr = csv::Reader::from_reader(std::io::stdin());
+    let mut records = csv::StringRecord::new();
+    let headers = rdr.headers()?.clone();
 
-    // convert into JSON
-    let json = serde_json::to_string_pretty(&csv)?;
+    while rdr.read_record(&mut records)? {
+        let record: kraken::account::TradesExport = records.deserialize(Some(&headers))?;
+        let json = serde_json::to_string_pretty(&record)?;
+        writeln!(std::io::stdout(), "{}", &json)?;
+    }
 
-    // Write output
-    write!(std::io::stdout(), "{}", &json)?;
-
-    // Done
     Ok(())
 }

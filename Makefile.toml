@@ -24,7 +24,7 @@ args = ["test", "--lib"]
 
 [tasks.test-integration]
 command = "cargo"
-args = ["test", "--test", "*"]
+args = ["test", "--test", "*", "--all-features"]
 condition = { files_exist = ["${CARGO_MAKE_WORKING_DIRECTORY}/tests"] }
 
 [tasks.test]
