@@ -24,3 +24,12 @@ where
         false => Err(de::Error::TrailingCharacters),
     }
 }
+
+#[cfg(feature = "serde")]
+pub fn from_reader<R, T>(_reader: R) -> Result<T, de::Error>
+where
+    R: std::io::Read,
+    T: serde::de::DeserializeOwned,
+{
+    unimplemented!()
+}

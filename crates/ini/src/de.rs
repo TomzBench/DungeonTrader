@@ -5,21 +5,21 @@ use serde::de::{self, IntoDeserializer, SeqAccess};
 use std::{error, fmt, num::ParseIntError};
 
 #[derive(Debug)]
-pub enum Error<'a> {
-    Parser(parse::Error<'a>),
+pub enum Error {
+    Parser(parse::de::OwnedError),
     Message(String),
     TrailingCharacters,
-    ExpectAssignment(parse::Error<'a>),
-    ExpectBool(Key<'a>),
-    ExpectChar(Key<'a>),
+    ExpectAssignment(parse::de::OwnedError),
+    ExpectBool(parse::de::OwnedKey),
+    ExpectChar(parse::de::OwnedKey),
     ExpectNum(ParseIntError),
-    ExpectIdent(&'a str),
+    ExpectIdent(String),
     Unsupported(&'static str),
 }
 
-impl<'a> error::Error for Error<'a> {}
+impl<'a> error::Error for Error {}
 
-impl de::Error for Error<'_> {
+impl de::Error for Error {
     fn custom<T>(msg: T) -> Self
     where
         T: std::fmt::Display,
@@ -28,19 +28,19 @@ impl de::Error for Error<'_> {
     }
 }
 
-impl<'a> From<parse::Error<'a>> for Error<'a> {
+impl<'a> From<parse::Error<'a>> for Error {
     fn from(value: parse::Error<'a>) -> Self {
-        Error::Parser(value)
+        Error::Parser(value.into())
     }
 }
 
-impl<'a> From<ParseIntError> for Error<'a> {
+impl<'a> From<ParseIntError> for Error {
     fn from(value: ParseIntError) -> Self {
         Error::ExpectNum(value)
     }
 }
 
-impl fmt::Display for Error<'_> {
+impl fmt::Display for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::Message(msg) => fmt.write_str(msg),
@@ -78,25 +78,25 @@ impl<'de> Deserializer<'de> {
         parse::de::peek_ident(self.input)
     }
 
-    fn parse_key_like(&mut self) -> Result<parse::Key<'de>, Error<'de>> {
+    fn parse_key_like(&mut self) -> Result<parse::Key<'de>, Error> {
         let (input, key) = parse::key_like(self.input).finish()?;
         self.input = input;
         Ok(key)
     }
 
-    fn parse_ident(&mut self) -> Result<parse::de::Ident<'de>, Error<'de>> {
+    fn parse_ident(&mut self) -> Result<parse::de::Ident<'de>, Error> {
         let (input, ident) = parse::de::ident(self.input).finish()?;
         self.input = input;
         Ok(ident)
     }
 
-    fn parse_assignment(&mut self) -> Result<char, Error<'de>> {
+    fn parse_assignment(&mut self) -> Result<char, Error> {
         let (input, (_, c, _)) = parse::de::assignment(self.input).finish()?;
         self.input = input;
         Ok(c)
     }
 
-    fn parse_comma(&mut self) -> Result<char, Error<'de>> {
+    fn parse_comma(&mut self) -> Result<char, Error> {
         let (input, (_, c, _)) = parse::de::comma(self.input).finish()?;
         self.input = input;
         Ok(c)
@@ -131,7 +131,7 @@ impl<'de> Deserializer<'de> {
 }
 
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
-    type Error = Error<'de>;
+    type Error = Error;
 
     fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
@@ -265,9 +265,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         match value {
             Key::Str(v) => match v.chars().next() {
                 Some(c) => visitor.visit_char(c),
-                None => Err(Error::ExpectChar(value)),
+                None => Err(Error::ExpectChar(value.into())),
             },
-            val => Err(Error::ExpectChar(val)),
+            val => Err(Error::ExpectChar(val.into())),
         }
     }
 
@@ -285,7 +285,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             Key::Str("FALSE") => visitor.visit_bool(false),
             Key::Num(0) => visitor.visit_bool(false),
             Key::Num(1) => visitor.visit_bool(true),
-            e => Err(Error::ExpectBool(e)),
+            e => Err(Error::ExpectBool(e.into())),
         }
     }
 
@@ -431,7 +431,7 @@ struct MapAccess<'a, 'de: 'a> {
 }
 
 impl<'de, 'a> de::MapAccess<'de> for MapAccess<'a, 'de> {
-    type Error = Error<'de>;
+    type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
     where
@@ -454,7 +454,7 @@ impl<'de, 'a> de::MapAccess<'de> for MapAccess<'a, 'de> {
                         self.de.parse_assignment()?;
                         Ok(result)
                     }
-                    None => Err(Error::ExpectIdent(self.de.input)),
+                    None => Err(Error::ExpectIdent(self.de.input.to_string())),
                 }
             }
         }
@@ -476,7 +476,7 @@ struct Sequence<'a, 'de: 'a> {
 }
 
 impl<'de, 'a> SeqAccess<'de> for Sequence<'a, 'de> {
-    type Error = Error<'de>;
+    type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
     where

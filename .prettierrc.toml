@@ -1,0 +1,3 @@
+plugins = ["@prettier/plugin-xml"]
+printWidth = 80
+tabWidth = 2

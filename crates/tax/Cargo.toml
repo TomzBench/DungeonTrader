@@ -8,7 +8,9 @@ dungeon-ini = { workspace = true, features = ["serde"] }
 csv = { workspace = true }
 serde = { workspace = true }
 chrono = { workspace = true }
+thiserror = { workspace = true }
 
+# testing dependencies
 [dev-dependencies]
 indoc = { workspace = true }
 serde_test = { workspace = true }

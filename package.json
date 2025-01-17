@@ -1,0 +1,14 @@
+{
+  "name": "dungeontrader",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@prettier/plugin-xml": "^3.4.1"
+  }
+}

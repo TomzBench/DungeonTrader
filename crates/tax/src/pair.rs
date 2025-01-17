@@ -1,6 +1,6 @@
 /// Pair
 ///
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt};
 
 /// Helper for managing trade pairs (IE: BTC/USD, BTC/ETH)
 use serde::{
@@ -16,6 +16,13 @@ impl<'a> Pair<'a> {
         Self(pair0.into(), pair1.into())
     }
 }
+
+impl<'a> fmt::Display for Pair<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.0.as_ref(), self.1.as_ref())
+    }
+}
+
 impl<'a> Serialize for Pair<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

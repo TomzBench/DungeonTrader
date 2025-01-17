@@ -128,7 +128,7 @@ pub(crate) fn tables(i: &str) -> IResult<&str, Sections> {
 
 #[cfg(feature = "serde")]
 pub(crate) mod de {
-    use super::{eol, key_like, section, Key};
+    use super::{eol, key_like, section, Error, Key};
     use nom::{
         branch::alt,
         character::complete::{char, multispace0, space0},
@@ -136,12 +136,51 @@ pub(crate) mod de {
         sequence::{preceded, terminated, tuple},
         IResult,
     };
+    use std::{error, fmt};
+
+    #[derive(Debug)]
+    pub struct OwnedError {
+        pub code: nom::error::ErrorKind,
+        pub input: String,
+    }
+
+    impl error::Error for OwnedError {}
+
+    impl<'a> From<Error<'a>> for OwnedError {
+        fn from(value: Error<'a>) -> Self {
+            Self {
+                code: value.code,
+                input: value.input.to_string(),
+            }
+        }
+    }
+
+    impl fmt::Display for OwnedError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "error {:?} at: {}", self.code, self.input)
+        }
+    }
 
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub(crate) enum Ident<'a> {
         // TODO add a Subsection(&'a str) to enum to capture [.ident]
         Section(&'a str),
         Key(Key<'a>),
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum OwnedKey {
+        Num(i64),
+        Str(String),
+    }
+
+    impl<'a> From<Key<'a>> for OwnedKey {
+        fn from(value: Key<'a>) -> Self {
+            match value {
+                Key::Num(n) => Self::Num(n),
+                Key::Str(s) => Self::Str(s.to_string()),
+            }
+        }
     }
 
     pub(crate) fn peek_ident(i: &str) -> Option<Ident> {
