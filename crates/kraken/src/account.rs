@@ -1,7 +1,9 @@
+use std::io;
+
 /// Rest api to read account data
 /// https://docs.kraken.com/api/docs/category/rest-api/account-data
-use crate::pair::Pair;
 use chrono::{DateTime, Utc};
+use dungeon_tax::{sheet, Pair};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -22,7 +24,7 @@ pub struct TradesExport<'a> {
     #[serde(borrow)]
     pub pair: Pair<'a>,
     /// Unix timestamp of trade
-    #[serde(with = "crate::date")]
+    #[serde(with = "dungeon_tax::date")]
     pub time: DateTime<Utc>,
     /// Type of order (buy/sell)
     #[serde(rename = "type")]
@@ -60,7 +62,7 @@ pub struct TradesInfo<'a> {
     #[serde(borrow)]
     pub pair: Pair<'a>,
     /// Unix timestamp of trade
-    #[serde(with = "crate::date")]
+    #[serde(with = "dungeon_tax::date")]
     pub time: DateTime<Utc>,
     /// Type of order (buy/sell)
     #[serde(rename = "type")]

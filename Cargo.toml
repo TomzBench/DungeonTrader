@@ -3,10 +3,14 @@ resolver = "2"
 members = [ 
 	"crates/tax",
 	"crates/ini",
+	"crates/kraken",
 ]
 
 [workspace.dependencies]
 dungeon-ini = { path = "crates/ini" }
+dungeon-tax = { path = "crates/tax" }
+dungeon-kraken = { path = "crates/kraken" }
+
 anyhow = "1"
 csv = "1.3"
 clap = { version = "4.5", features = ["cargo", "env"] }

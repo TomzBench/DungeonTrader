@@ -3,8 +3,11 @@
 /// See more about the configuration here:
 /// https://github.com/eprbell/rp2/blob/main/docs/input_files.md#the-config-file
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
-use std::{collections::HashMap, str};
+use serde::{
+    de::{self},
+    Deserialize,
+};
+use std::{collections::HashMap, fmt, str};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -34,8 +37,7 @@ pub enum Input {
     Wages,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
+/*
 pub struct InputHeader {
     pub timestamp: u8,
     pub asset: u8,
@@ -49,6 +51,18 @@ pub struct InputHeader {
     pub fiat_in_no_fee: Option<u8>,
     pub fiat_in_with_fee: Option<u8>,
     pub notes: Option<u8>,
+}
+*/
+
+#[derive(Debug)]
+pub struct InputHeader(Vec<String>);
+impl<'de> Deserialize<'de> for InputHeader {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        deserializer.deserialize_map(Visitor).map(Self)
+    }
 }
 
 #[derive(Deserialize)]
@@ -186,6 +200,61 @@ pub struct Headers<'a> {
     pub accounting_methods: Option<AccountingMethods>,
 }
 
+impl<'a> Headers<'a> {
+    //"txid","ordertxid","pair","time","type","ordertype","price","cost","fee","vol","margin","misc","ledgers","costusd"
+
+    pub fn input(&self) -> String {
+        self.in_header.0.join(",")
+    }
+
+    pub fn output(&self) -> String {
+        unimplemented!()
+    }
+
+    pub fn intra(&self) -> String {
+        // TODO output a sorted intra csv header
+        unimplemented!()
+    }
+}
+
+/// A data source which can populate a vector of transactions
+pub trait Importer {
+    fn import(&self, entries: &mut Vec<Entry>, config: Headers);
+
+    fn size_hint(&self) -> usize;
+}
+
+pub struct Visitor;
+impl<'de> de::Visitor<'de> for Visitor {
+    type Value = Vec<String>;
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("expecting key = idx value pairs")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::MapAccess<'de>,
+    {
+        let mut inner = Vec::new();
+        while let Some((key, value)) = map.next_entry::<&'de str, usize>()? {
+            if value >= inner.len() {
+                for _ in inner.len()..value + 1 {
+                    inner.push("".to_string());
+                }
+            }
+            inner[value] = key.to_owned();
+        }
+        Ok(inner)
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(v.split(",").map(|s| s.to_owned()).collect())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{AccountingMethod, Headers};
@@ -248,10 +317,37 @@ mod test {
         assert_eq!("B3", config.general.assets[2]);
         assert_eq!("B4", config.general.assets[3]);
         assert_eq!(Some(&"debug"), config.general.extra.get("meta"));
-        assert_eq!(11, config.in_header.fiat_fee);
+        assert_eq!("timestamp", config.in_header.0[0]);
+        assert_eq!("asset", config.in_header.0[6]);
+        assert_eq!("exchange", config.in_header.0[1]);
+        assert_eq!("holder", config.in_header.0[2]);
+        assert_eq!("transaction_type", config.in_header.0[5]);
+        assert_eq!("spot_price", config.in_header.0[8]);
+        assert_eq!("crypto_in", config.in_header.0[7]);
+        assert_eq!("fiat_fee", config.in_header.0[11]);
+        assert_eq!("fiat_in_no_fee", config.in_header.0[9]);
+        assert_eq!("fiat_in_with_fee", config.in_header.0[10]);
+        assert_eq!("notes", config.in_header.0[12]);
         assert_eq!(9, config.out_header.crypto_fee);
         assert_eq!(None, config.out_header.notes);
         assert_eq!(Some(12), config.intra_header.notes);
+
+        let expect_input = [
+            "timestamp",
+            "exchange",
+            "holder",
+            "",
+            "",
+            "transaction_type",
+            "asset",
+            "crypto_in",
+            "spot_price",
+            "fiat_in_no_fee",
+            "fiat_in_with_fee",
+            "fiat_fee",
+            "notes",
+        ];
+        assert_eq!(expect_input.join(","), config.input());
         assert_eq!(
             Some(&AccountingMethod::Hifo),
             config.accounting_methods.unwrap().year.get(&2022)

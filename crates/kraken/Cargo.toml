@@ -1,0 +1,14 @@
+[package]
+name = "dungeon-kraken"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dungeon-tax = { workspace = true }
+csv = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+indoc = { workspace = true }
+

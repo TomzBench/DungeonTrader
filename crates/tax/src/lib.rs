@@ -1,6 +1,5 @@
 pub mod date;
-pub mod kraken;
-pub mod pair;
-/// DungeonTax
-///
+mod pair;
 pub mod sheet;
+
+pub use pair::Pair;

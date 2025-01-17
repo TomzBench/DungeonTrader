@@ -97,6 +97,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dungeon-kraken"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "csv",
+ "dungeon-tax",
+ "indoc",
+ "serde",
+]
+
+[[package]]
 name = "dungeon-tax"
 version = "0.1.0"
 dependencies = [

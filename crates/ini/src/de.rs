@@ -367,7 +367,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let ident = self.parse_ident()?;
-        println!("{:?}", ident);
         match ident {
             parse::de::Ident::Key(Key::Num(n)) => visitor.visit_i64(n),
             parse::de::Ident::Key(Key::Str(s)) => visitor.visit_borrowed_str(s),
