@@ -6,11 +6,16 @@ edition = "2021"
 [dependencies]
 dungeon-ini = { workspace = true, features = ["serde"] }
 csv = { workspace = true }
+rust_xlsxwriter = { workspace = true, features = ["serde"], optional = true }
 serde = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 
 # testing dependencies
 [dev-dependencies]
 indoc = { workspace = true }
 serde_test = { workspace = true }
+
+[features]
+xlsx = ["dep:rust_xlsxwriter"]

@@ -1,12 +1,12 @@
 use crate::account::{BuySell, TradesExport};
-use dungeon_tax::sheet::{self, AssetMap};
-use std::{fs, io, path};
-use tracing::{trace, warn};
+use dungeon_tax::sheet::{self, AssetTables};
+use std::{collections::HashMap, io};
+use tracing::trace;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ImportError {
     #[error("Invalid data => {0}")]
-    Csv(#[from] csv::Error),
+    InvalidData(#[from] csv::Error),
     #[error("Unknown Asset {0}")]
     UnknownAsset(String),
 }
@@ -14,7 +14,7 @@ pub enum ImportError {
 pub fn from_reader<R, W>(
     config: &sheet::Config,
     src: R,
-    dst: &mut AssetMap<'_, W>,
+    dst: &mut HashMap<&str, AssetTables<W>>,
 ) -> Result<(), ImportError>
 where
     R: io::Read,
@@ -28,6 +28,14 @@ where
         let trade = record.deserialize::<TradesExport>(Some(&headers))?;
         let base_currency = trade.pair.0.as_ref();
         let quote_currency = trade.pair.1.as_ref();
+        trace!(
+            date = trade.time.to_string(),
+            base_currency,
+            quote_currency,
+            usd = trade.costusd,
+            type = ?trade.typ
+        );
+
         if config
             .general
             .assets
@@ -37,43 +45,24 @@ where
             let (o, i) = convert(config, &trade);
             dst.get_mut(quote_currency)
                 .ok_or_else(|| ImportError::UnknownAsset(quote_currency.to_string()))?
-                .1
+                .output
                 .serialize(&o)?;
             dst.get_mut(base_currency)
                 .ok_or_else(|| ImportError::UnknownAsset(base_currency.to_string()))?
-                .0
+                .input
                 .serialize(&i)?;
-            trace!(
-                date = o.timestamp.to_string(),
-                base_currency,
-                quote_currency,
-                usd = trade.costusd,
-                "convert"
-            );
         } else if trade.typ == BuySell::Buy {
             let tx = buy(config, &trade);
             dst.get_mut(base_currency)
                 .ok_or_else(|| ImportError::UnknownAsset(base_currency.to_string()))?
-                .0
+                .input
                 .serialize(&tx)?;
-            trace!(
-                date = tx.timestamp.to_string(),
-                base_currency,
-                usd = trade.costusd,
-                "buy"
-            );
         } else if trade.typ == BuySell::Sell {
             let tx = sell(config, &trade);
             dst.get_mut(base_currency)
                 .ok_or_else(|| ImportError::UnknownAsset(base_currency.to_string()))?
-                .1
+                .output
                 .serialize(&tx)?;
-            trace!(
-                date = tx.timestamp.to_string(),
-                base_currency,
-                usd = trade.costusd,
-                "sell"
-            );
         }
     }
     Ok(())

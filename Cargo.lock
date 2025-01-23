@@ -258,9 +258,11 @@ dependencies = [
  "csv",
  "dungeon-ini",
  "indoc",
+ "rust_xlsxwriter",
  "serde",
  "serde_test",
  "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]

@@ -8,6 +8,71 @@ use serde::{
     Deserialize, Serialize,
 };
 use std::{collections::HashMap, fmt, io, str};
+use tracing::warn;
+
+macro_rules! impl_deserialize_header {
+    ($name:ty) => {
+        impl std::ops::Index<usize> for $name {
+            type Output = String;
+            fn index(&self, index: usize) -> &Self::Output {
+                &self.0[index]
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(de: D) -> Result<Self, D::Error>
+            where
+                D: de::Deserializer<'de>,
+            {
+                de.deserialize_map(Visitor).map(Self)
+            }
+        }
+    };
+}
+
+macro_rules! impl_xlsx_writer {
+    ($ty:ident <$li:lifetime>) => {
+        #[cfg(feature = "xlsx")]
+        impl<$li> $ty<$li> {
+            pub fn write_headers(
+                worksheet: &mut rust_xlsxwriter::Worksheet,
+                row: rust_xlsxwriter::RowNum,
+                mut col: rust_xlsxwriter::ColNum,
+                headers: &Vec<String>,
+            ) -> Result<(), rust_xlsxwriter::XlsxError> {
+                for header in headers.iter() {
+                    worksheet.write(row, col, header)?;
+                    col += 1;
+                }
+                Ok(())
+            }
+
+            pub fn write_data(
+                worksheet: &mut rust_xlsxwriter::Worksheet,
+                data: &[u8],
+            ) -> Result<(), ImportError> {
+                let mut reader = csv::Reader::from_reader(data);
+                let mut record = csv::StringRecord::new();
+                let headers = reader.headers()?.clone();
+                while reader.read_record(&mut record)? {
+                    println!("{:?}", record);
+                    // let data = record.deserialize::<$ty>(Some(&headers))?;
+                    // worksheet.serialize(&data)?;
+                }
+                Ok(())
+            }
+        }
+    };
+}
+
+#[cfg(feature = "xlsx")]
+#[cfg_attr(feature = "xlsx", derive(thiserror::Error, Debug))]
+pub enum ImportError {
+    #[error("Read error {0}")]
+    Read(#[from] csv::Error),
+    #[error("Write error {0}")]
+    Write(#[from] rust_xlsxwriter::XlsxError),
+}
 
 pub struct Visitor;
 impl<'de> de::Visitor<'de> for Visitor {
@@ -52,30 +117,9 @@ pub struct General {
     pub extra: HashMap<String, String>,
 }
 
-macro_rules! impl_deserialize_header {
-    ($name:ty) => {
-        impl std::ops::Index<usize> for $name {
-            type Output = String;
-            fn index(&self, index: usize) -> &Self::Output {
-                &self.0[index]
-            }
-        }
-
-        impl<'de> Deserialize<'de> for $name {
-            fn deserialize<D>(de: D) -> Result<Self, D::Error>
-            where
-                D: de::Deserializer<'de>,
-            {
-                de.deserialize_map(Visitor).map(Self)
-            }
-        }
-    };
-}
-
 // https://github.com/eprbell/rp2/blob/main/docs/input_files.md#in-transaction-table-format
 #[derive(Debug)]
-pub struct InputHeader(Vec<String>);
-impl_deserialize_header!(InputHeader);
+pub struct InputHeader(pub Vec<String>);
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -93,6 +137,23 @@ pub enum Input {
     Wages,
 }
 
+impl ToString for Input {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Airdrop => "airdrop".to_string(),
+            Self::Buy => "buy".to_string(),
+            Self::Donate => "donate".to_string(),
+            Self::Gift => "gift".to_string(),
+            Self::Hardfork => "hardfork".to_string(),
+            Self::Income => "income".to_string(),
+            Self::Interest => "interest".to_string(),
+            Self::Mining => "mining".to_string(),
+            Self::Staking => "staking".to_string(),
+            Self::Wages => "wages".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct InputData<'a> {
@@ -101,7 +162,7 @@ pub struct InputData<'a> {
     pub asset: &'a str,
     pub exchange: &'a str,
     pub holder: &'a str,
-    #[serde(rename = "type")]
+    #[serde(rename(serialize = "transaction_type", deserialize = "type"))]
     pub typ: Input,
     pub spot_price: f32,
     pub crypto_in: f32,
@@ -113,10 +174,41 @@ pub struct InputData<'a> {
     pub notes: Option<&'a str>,
 }
 
+impl<'a> InputData<'a> {
+    pub fn sort(headers: &Vec<String>, record: csv::StringRecord) -> csv::StringRecord {
+        let mut sorted = csv::StringRecord::new();
+        for (_idx, header) in headers.iter().enumerate() {
+            match header.as_str() {
+                "timestamp" => sorted.push_field(&record[0]),
+                "asset" => sorted.push_field(&record[1]),
+                "exchange" => sorted.push_field(&record[2]),
+                "holder" => sorted.push_field(&record[3]),
+                "transaction_type" => sorted.push_field(&record[4]),
+                "type" => sorted.push_field(&record[4]),
+                "spot_price" => sorted.push_field(&record[5]),
+                "crypto_in" => sorted.push_field(&record[6]),
+                "crypto_fee" => sorted.push_field(&record[7]),
+                "fiat_in_no_fee" => sorted.push_field(&record[8]),
+                "fiat_in_with_fee" => sorted.push_field(&record[9]),
+                "fiat_fee" => sorted.push_field(&record[10]),
+                "unique_id" => sorted.push_field(&record[11]),
+                "notes" => sorted.push_field(&record[12]),
+                field => {
+                    warn!(field, "unknown header");
+                    sorted.push_field("");
+                }
+            }
+        }
+        sorted
+    }
+}
+
+impl_deserialize_header!(InputHeader);
+impl_xlsx_writer!(InputData<'a>);
+
 // https://github.com/eprbell/rp2/blob/main/docs/input_files.md#out-transaction-table-format
 #[derive(Debug)]
-pub struct OutputHeader(Vec<String>);
-impl_deserialize_header!(OutputHeader);
+pub struct OutputHeader(pub Vec<String>);
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -138,6 +230,7 @@ pub struct OutputData<'a> {
     pub asset: &'a str,
     pub exchange: &'a str,
     pub holder: &'a str,
+    #[serde(rename(serialize = "transaction_type", deserialize = "type"))]
     pub typ: Output,
     pub spot_price: f32,
     pub crypto_out_no_fee: f32,
@@ -149,10 +242,12 @@ pub struct OutputData<'a> {
     pub notes: Option<&'a str>,
 }
 
+impl_deserialize_header!(OutputHeader);
+impl_xlsx_writer!(OutputData<'a>);
+
 // https://github.com/eprbell/rp2/blob/main/docs/input_files.md#intra-transaction-table-format
 #[derive(Debug)]
-pub struct IntraHeader(Vec<String>);
-impl_deserialize_header!(IntraHeader);
+pub struct IntraHeader(pub Vec<String>);
 
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
@@ -170,6 +265,9 @@ pub struct IntraData<'a> {
     pub unique_id: &'a str,
     pub notes: Option<&'a str>,
 }
+
+impl_deserialize_header!(IntraHeader);
+impl_xlsx_writer!(IntraData<'a>);
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -196,22 +294,27 @@ pub struct Config {
     pub accounting_methods: Option<AccountingMethods>,
 }
 
-impl Config {
-    pub fn input_headers(&self) -> String {
-        self.in_header.0.join(",")
-    }
-
-    pub fn output_headers(&self) -> String {
-        self.out_header.0.join(",")
-    }
-
-    pub fn intra_headers(&self) -> String {
-        self.intra_header.0.join(",")
-    }
+pub struct AssetTables<W>
+where
+    W: io::Write,
+{
+    pub input: csv::Writer<W>,
+    pub output: csv::Writer<W>,
+    pub intra: csv::Writer<W>,
 }
 
-pub type AssetTables<W> = (csv::Writer<W>, csv::Writer<W>, csv::Writer<W>);
-pub type AssetMap<'a, W> = HashMap<&'a str, AssetTables<W>>;
+impl<W> AssetTables<W>
+where
+    W: io::Write,
+{
+    pub fn into_inner(self) -> Result<(W, W, W), csv::IntoInnerError<csv::Writer<W>>> {
+        Ok((
+            self.input.into_inner()?,
+            self.output.into_inner()?,
+            self.intra.into_inner()?,
+        ))
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -313,7 +416,7 @@ mod test {
             "fiat_fee",
             "notes",
         ];
-        assert_eq!(expect_input.join(","), config.input_headers());
+        assert_eq!(expect_input, config.in_header.0.as_slice());
         assert_eq!(
             Some(&AccountingMethod::Hifo),
             config.accounting_methods.unwrap().year.get(&2022)

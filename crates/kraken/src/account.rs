@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// Rest api to read account data
 /// https://docs.kraken.com/api/docs/category/rest-api/account-data
 use chrono::{DateTime, Utc};
@@ -9,6 +11,15 @@ use serde::{Deserialize, Serialize};
 pub enum BuySell {
     Buy,
     Sell,
+}
+
+impl fmt::Display for BuySell {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BuySell::Buy => f.write_str("buy"),
+            BuySell::Sell => f.write_str("sell"),
+        }
+    }
 }
 
 /// Trade data from export csv file

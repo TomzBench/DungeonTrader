@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 dungeon-ini = { workspace = true }
 dungeon-kraken = { workspace = true }
-dungeon-tax = { workspace = true }
+dungeon-tax = { workspace = true, features = ["xlsx"] }
 
 csv = { workspace = true }
 rust_xlsxwriter = { workspace = true }

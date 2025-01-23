@@ -5,11 +5,10 @@ use clap::{
     builder::{EnumValueParser, PossibleValue},
     command, value_parser, Arg, ArgAction, ValueEnum,
 };
-use dungeon_kraken::account::TradesExport;
-use dungeon_tax::sheet::{AssetMap, AssetTables, Config, InputData};
-use rust_xlsxwriter::{Workbook, Worksheet, XlsxError};
+use dungeon_tax::sheet::{AssetTables, Config, InputData, IntraData, OutputData};
+use rust_xlsxwriter::Workbook;
 use std::{collections::HashMap, fs, iter::zip, path::PathBuf};
-use tracing::{debug, info, trace};
+use tracing::info;
 use tracing_subscriber::{filter::LevelFilter, fmt, layer::SubscriberExt, prelude::*};
 
 fn main() -> Result<()> {
@@ -64,47 +63,58 @@ fn main() -> Result<()> {
         .expect("`config` missing arg");
     let config: Config = dungeon_ini::from_str(&fs::read_to_string(path_config)?)?;
 
+    // Get a array of crypto currency ticker symbols for which we are interested in
+    let assets: Vec<&'_ str> = config.general.assets.iter().map(|a| a.as_str()).collect();
+
+    // Get some buffers to write csv data to
+    let buffers: Vec<_> = config
+        .general
+        .assets
+        .iter()
+        .map(|_asset| AssetTables {
+            input: csv::Writer::from_writer(Vec::new()),
+            output: csv::Writer::from_writer(Vec::new()),
+            intra: csv::Writer::from_writer(Vec::new()),
+        })
+        .collect();
+
     // Parse the exchange input csv data (TODO parse multiple exchanges)
     let path_input = matches
         .get_one::<PathBuf>("input")
         .expect("`input` missing arg");
     let mut input = fs::File::open(path_input)?;
 
-    // Get a array of crypto currency ticker symbols for which we are interested in
-    let assets: Vec<&'_ str> = config.general.assets.iter().map(|a| a.as_str()).collect();
-
-    // Get some buffers to write csv data to
-    let buffers: Vec<AssetTables<Vec<u8>>> = config
-        .general
-        .assets
-        .iter()
-        .map(|_| {
-            (
-                csv::Writer::from_writer(Vec::new()),
-                csv::Writer::from_writer(Vec::new()),
-                csv::Writer::from_writer(Vec::new()),
-            )
-        })
-        .collect();
-
     // Import our csv data into the asset tables
-    let mut asset_tables: AssetMap<_> = zip(assets, buffers).into_iter().collect();
+    let mut asset_tables: HashMap<_, _> = zip(assets, buffers).into_iter().collect();
     dungeon_kraken::import::from_reader(&config, &mut input, &mut asset_tables)?;
 
     // Write csv data into workbook
     let mut workbook = Workbook::new();
-    for (asset, (input, output, intra)) in asset_tables.drain() {
-        let input_buffer = input.into_inner()?;
-        let mut record = csv::StringRecord::new();
-        let mut reader = csv::Reader::from_reader(input_buffer.as_slice());
-        let headers = reader.headers()?.clone();
+    for (asset, tables) in asset_tables.drain() {
+        // Get the buffers and create a worksheet
+        let (input, output, intra) = tables.into_inner()?;
         let worksheet = workbook.add_worksheet().set_name(asset)?;
+
+        // Write the input table
         worksheet.write(0, 0, "IN")?;
-        worksheet.deserialize_headers::<InputData>(1, 0)?;
-        while reader.read_record(&mut record)? {
-            let data = record.deserialize::<InputData>(Some(&headers))?;
-            worksheet.serialize(&data)?;
-        }
+        InputData::write_headers(worksheet, 1, 0, &config.in_header.0)?;
+        InputData::write_data(worksheet, input.as_slice())?;
+        // let (_, _, row, _) = worksheet.get_serialize_dimensions("InputData")?;
+        worksheet.write(2, 0, "TABLE END")?;
+
+        // Write the output table
+        // worksheet.write(row + 3, 0, "OUT")?;
+        // OutputData::write_headers(worksheet, row + 4, 0, &config.out_header.0)?;
+        // OutputData::write_data(worksheet, output.as_slice())?;
+        // let (_, _, row, _) = worksheet.get_serialize_dimensions("OutputData")?;
+        // worksheet.write(row + 1, 0, "TABLE END")?;
+
+        // // Write the intra table
+        // worksheet.write(row + 3, 0, "INTRA")?;
+        // IntraData::write_headers(worksheet, row + 4, 0, &config.intra_header.0)?;
+        // IntraData::write_data(worksheet, intra.as_slice())?;
+        // let (_, _, row, _) = worksheet.get_serialize_dimensions("IntraData")?;
+        // worksheet.write(row + 1, 0, "TABLE END")?;
     }
 
     let output = matches
